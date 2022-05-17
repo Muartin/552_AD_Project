@@ -8,10 +8,6 @@ def system(t, w, k, kstar, lmbda, M):
         derivatives = []
         n = len(w)
 
-        # if t is a multiple of 0.5, update
-        # else, set a to previous value
-
-
         #calculate for change in number of monomer w.r.t. time
         dot_w = 0
         for j in range(n - 1):
@@ -102,13 +98,24 @@ while curr_slice < years:
         lmda = 2 * (1 - prev_ad) * (1 + beta * prev_ad)
         # reassigning constants with new lmda
         constants = (k, kstar, lmda, M)
-        end_slice = curr_slice + tslice
-        next_sol = integrate.solve_ivp(system, (curr_slice, end_slice), initial,
-                                       t_eval=np.arange(curr_slice, end_slice, dt), args=constants)
+        print("current slice: " + str(curr_slice))
+        if curr_slice != 0:
+                start_t = curr_slice
+                end_slice = curr_slice + tslice + dt
+        else:
+                start_t = curr_slice
+                end_slice = curr_slice + tslice + dt
+        print("(" + str(start_t) + "," + str(end_slice) + ")")
+        next_sol = integrate.solve_ivp(system, (start_t, end_slice), initial,
+                                       t_eval=np.arange(start_t, end_slice, dt), args=constants)
         if len(tsol) != 0:
-                tsol = np.append(tsol, next_sol.t)
+                print(tsol)
+                print(next_sol.t)
+                tsol = np.append(tsol, next_sol.t[1:len(next_sol.t)-1])
                 for i in range(len(ysol)):
-                        ysol[i] = np.append(ysol[i], next_sol.y[i])
+                        print(ysol[i][len(ysol[i])-1])
+                        print(next_sol.y[i])
+                        ysol[i] = np.append(ysol[i], next_sol.y[i][1:len(next_sol.y[i])-1])
         else:
                 tsol = next_sol.t
                 for i in range(len(next_sol.y)):
@@ -122,7 +129,7 @@ while curr_slice < years:
         # calculate degradation
         d = degradation(gmma, ysol)
         # update ad with new_ad
-        print(d)
+        print("d: " + str(d))
         for i in range(int(tslice/dt)-1):
                 ad.append(None)
         if d > dlimit:
@@ -133,6 +140,10 @@ while curr_slice < years:
                 ad.append(prev_ad)
 
 ad.pop()
+print(tsol)
+print(ysol[0])
+print("times: " + str(len(tsol)))
+print("ad's: " + str(len(ad)))
 # plotting ys over time
 plt.title('Plot for n=' + str(n) + ' with a=0')
 for i in range(n):
@@ -152,5 +163,5 @@ plt.legend()
 
 filepath = 'figures/'
 os.makedirs(os.path.dirname(filepath), exist_ok=True)
-plt.savefig(filepath + 'n=' + str(n))
+plt.savefig(filepath + 'ad_progress_immobile_n-' + str(n))
 plt.show()
