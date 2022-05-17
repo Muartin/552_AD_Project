@@ -6,7 +6,11 @@ import os
 # defining the system of differential equations from 4.1 for any n
 def system(t, w, k, kstar, lmbda, M):
         derivatives = []
-        n = len(w)      
+        n = len(w)
+
+        # if t is a multiple of 0.5, update
+        # else, set a to previous value
+
 
         #calculate for change in number of monomer w.r.t. time
         dot_w = 0
@@ -37,32 +41,24 @@ def system(t, w, k, kstar, lmbda, M):
                                 dot_w += 0.5*k*w[i]*w[j]
         dot_w -= M*w[-1]
         derivatives.append(dot_w)
+
         
         return tuple(derivatives)
 
 
 def degradation(gammas, odeys):
-        deg_vals = []
-        for t in range(len(odeys[0])):
-                deg = 0
-                for s in range(1, len(odeys) - 1):
-                        print(s)
-                        deg += gammas[s]*odeys[s][t]
-                deg_vals.append(deg)
-        return deg_vals
+        deg = 0
+        for s in range(0, len(odeys) - 1):
+                deg += gammas[s]*odeys[s][len(odeys[s])-1]
+        return deg
 
 
-def ad_progression(ad, tf, deg, deglimit, theta):
+def ad_progression(ad, endtime, deg, deglimit, theta):
         # updated twice a year
         t = 0.5
-        while t <= tf:
+        while t <= endtime:
                 deg_val = int(t*400)
-                if deg[deg_val] > deglimit:
-                        new_ad = ad[len(ad - 1)] + theta * (deg[deg_val] - dlimit)
-                        ad.append(new_ad)
-                else:
-                        ad.append(ad[len(ad)-1])
-                print("ad(" + str(t) + ") = " + str(ad[len(ad)-1]))
+
                 t += 0.5
         return ad
 
@@ -70,24 +66,16 @@ def ad_progression(ad, tf, deg, deglimit, theta):
 n = int(input('input a value for n: '))
 
 # the final time and time step for evaluating
-tf = 20
-dt = 0.05
-
-# initial point to solve with, all initial values are set to 0
-initial = tuple([0]*n)
+years = 20
+tslice = 0.5
+curr_slice = 0.0
+dt = 0.1
 
 # defining constants
-k = 10**(-4)
-kstar = 5 * 10**(-6)
-lmda = 2.548
-M = 10**(-2)
-
-constants = (k, kstar, lmda, M)
-
-sol = integrate.solve_ivp( system, (0, tf), initial, t_eval=np.arange(0, tf + dt, dt), args=constants)
-
-# sol.y returns a list of matrices of y values for each y
-# sol.t returns a list of time points of t
+k = 10 ** (-4)
+kstar = 5 * 10 ** (-6)
+M = 10 ** (-2)
+beta = 15
 
 # set gamma influences to be uniform among oligomers
 gmma = [0]
@@ -95,28 +83,71 @@ for i in range(n-2):
         gmma.append(1/(n-2))
 gmma.append(0)
 print("gammas: " + str(gmma))
-# calculate degradation
-d = degradation(gmma, sol.y)
-max = 0
-# grab maximum value of degradation
-for degrade in d:
-        if degrade > max:
-                max = degrade
-print("max deg = " + str(max))
 
-# calculate ad progression
+# set ad progression constants
 dlimit = 22
 thta = 10**(-3)
-ad = [0.2]
-ad = ad_progression(ad, tf, d, dlimit, thta)
 
-# plotting as a function of t
+# initializing a(t) and odes
+ad = [0.02]
+prev_ad = 0.02
+initial = tuple([0] * n)
+
+# initializing solution
+tsol = []
+ysol = {}
+
+while curr_slice < years:
+        # lmda set with current a(t) value
+        lmda = 2 * (1 - prev_ad) * (1 + beta * prev_ad)
+        # reassigning constants with new lmda
+        constants = (k, kstar, lmda, M)
+        end_slice = curr_slice + tslice
+        next_sol = integrate.solve_ivp(system, (curr_slice, end_slice), initial,
+                                       t_eval=np.arange(curr_slice, end_slice, dt), args=constants)
+        if len(tsol) != 0:
+                tsol = np.append(tsol, next_sol.t)
+                for i in range(len(ysol)):
+                        ysol[i] = np.append(ysol[i], next_sol.y[i])
+        else:
+                tsol = next_sol.t
+                for i in range(len(next_sol.y)):
+                        ysol[i] = next_sol.y[i]
+        # update initial for next slice
+        new_init = []
+        for i in range(len(ysol)):
+                new_init.append(ysol[i][len(ysol[i])-1])
+        initial = tuple(new_init)
+        curr_slice += tslice
+        # calculate degradation
+        d = degradation(gmma, ysol)
+        # update ad with new_ad
+        print(d)
+        for i in range(int(tslice/dt)-1):
+                ad.append(None)
+        if d > dlimit:
+                new_ad = prev_ad + theta * (deg[deg_val] - dlimit)
+                prev_ad = new_ad
+                ad.append(new_ad)
+        else:
+                ad.append(prev_ad)
+
+ad.pop()
+# plotting ys over time
 plt.title('Plot for n=' + str(n) + ' with a=0')
 for i in range(n):
         this_label = 'Y' + str(i + 1)
-        plt.plot(sol.t, sol.y[i], label=this_label)
+        plt.plot(tsol, ysol[i], label=this_label)
 plt.xlabel('Time (days)')
 plt.ylabel('Mass of Proteins (nanograms)')
+plt.legend()
+
+# plotting degredation values over time
+plt.title('AD Progression over Time')
+this_label = 'a(t)'
+plt.scatter(tsol, ad, label=this_label)
+plt.xlabel('Time (years)')
+plt.ylabel('Degradation')
 plt.legend()
 
 filepath = 'figures/'
